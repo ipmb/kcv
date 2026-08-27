@@ -5,6 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     MissingEnvironment,
+    NoCommand,
     InvalidEnvironmentName(String),
     InvalidKey(String),
     EnvironmentNotFound(String),
@@ -24,7 +25,8 @@ impl Error {
         match self {
             Error::MissingEnvironment
             | Error::InvalidEnvironmentName(_)
-            | Error::InvalidKey(_) => 2,
+            | Error::InvalidKey(_)
+            | Error::NoCommand => 2,
             Error::Exec { source, .. } => match source.kind() {
                 std::io::ErrorKind::NotFound => 127,
                 _ => 126,
@@ -41,6 +43,7 @@ impl fmt::Display for Error {
                 f,
                 "no environment given; pass --environment NAME or set KCV_ENV"
             ),
+            Error::NoCommand => write!(f, "no command given; usage: kcv -e NAME exec -- COMMAND"),
             Error::InvalidEnvironmentName(n) => write!(f, "invalid environment name {n:?}"),
             Error::InvalidKey(k) => write!(
                 f,

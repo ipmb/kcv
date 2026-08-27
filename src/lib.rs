@@ -1,3 +1,4 @@
+pub mod cmd;
 pub mod envset;
 pub mod error;
 pub mod prompt;

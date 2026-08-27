@@ -34,7 +34,9 @@ impl EnvSet {
         validate_key(key)?;
         if value.contains('\0') {
             // Named without echoing the value, which is a secret.
-            return Err(Error::InvalidKey(format!("{key} (value contains a NUL byte)")));
+            return Err(Error::InvalidKey(format!(
+                "{key} (value contains a NUL byte)"
+            )));
         }
         self.0.insert(key.to_string(), value.to_string());
         Ok(())
