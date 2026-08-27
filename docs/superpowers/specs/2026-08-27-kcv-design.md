@@ -112,6 +112,20 @@ process lingers in the tree.
 Secrets overlay the inherited environment: a variable stored in `kcv` wins over
 one already present in the shell.
 
+Replacing the process rather than forking is what makes interactive programs and
+TUIs work unchanged. The command inherits the same stdio file descriptors, the
+same controlling terminal, and the same process group and session, so `isatty`
+checks pass, job control (Ctrl-C, Ctrl-Z, `fg`) behaves normally, and SIGWINCH
+reaches the child for redraw on resize. `kcv -e prod exec -- vim` or `-- psql`
+is indistinguishable from running the command directly. No implementation may
+replace `exec` with fork-and-wait without taking on signal forwarding, exit
+status relay, and job control by hand.
+
+Note that the keychain authorization dialog is a GUI prompt. In a session with
+no GUI — over SSH, or on a CI runner — a read that still requires approval
+fails rather than prompting. Once approved locally, later reads are silent and
+succeed over SSH.
+
 To keep this testable, the pure part is factored out:
 
 ```rust
