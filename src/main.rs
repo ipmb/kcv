@@ -1,2 +1,3 @@
-mod error;
-fn main() { println!("kcv"); }
+fn main() {
+    println!("kcv");
+}
