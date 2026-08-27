@@ -41,8 +41,9 @@ environment variable; if neither is present, `kcv` exits with a usage error.
 **first** `=`: everything before is the key, everything after is the value, and
 an empty value (`FOO=`) is legal and sets an empty string. An argument with no
 `=` is a key whose value is prompted for: if stdin is a TTY, `kcv` reads it from
-`/dev/tty` with echo disabled; otherwise it reads one line from stdin, so
-`echo secret | kcv -e prod set FOO` works in scripts. Within a single
+`/dev/tty` with echo disabled via `termios`; otherwise it reads one line from
+stdin, so `echo secret | kcv -e prod set FOO` works in scripts. Echo is
+restored on every exit path, including errors and Ctrl-C. Within a single
 invocation, a repeated key takes its last value.
 
 `set` writes a confirmation to stderr naming the environment and the number of
@@ -171,8 +172,44 @@ prompt and without touching the login keychain.
 
 ## Dependencies
 
-`clap` 4 (derive), `serde` 1 (derive), `serde_json` 1, `security-framework` 3,
-`anyhow` 1, `rpassword` 7. Rust stable, edition 2024.
+Policy: prefer writing our own code over adding a dependency, and take only
+well-vetted crates when a dependency is genuinely warranted. Measured with
+`cargo tree --edges normal`, the tree below is **28 crates** from 4 direct
+dependencies.
+
+| Crate | Why it earns its place |
+|---|---|
+| `clap` 4, `derive` | Generated help, and room for `list`/`get`/`rm` later |
+| `serde_json` 1 | Blob encoding. No custom serialization code means no custom escaping bugs |
+| `security-framework` 3 | Keychain access. See below |
+| `libc` 0.2 | `termios` for the hidden-input prompt. Already in the tree via `security-framework` |
+
+`serde`'s `derive` feature is deliberately **not** enabled and `serde` is not a
+direct dependency. The blob is a `BTreeMap<String, String>`, for which serde
+provides impls natively, so `serde_json::to_vec` and `from_slice` work with no
+derive and one fewer proc-macro crate to compile.
+
+Two dependencies from an earlier draft were cut in favour of our own code:
+
+- `anyhow` — replaced by a small error enum with a `Display` impl (~30 lines).
+- `rpassword` — replaced by a direct `termios` call: open `/dev/tty`,
+  `tcgetattr`, clear `ECHO`, `tcsetattr`, read a line, restore the original
+  flags (~40 lines). The restore must run even on error or interrupt, or the
+  user's terminal is left with echo disabled.
+
+`security-framework` is the one dependency doing work we should not do
+ourselves. Hand-rolling it means roughly 250 lines of `unsafe` FFI against
+`SecItemAdd`, `SecItemCopyMatching` and `SecItemUpdate`, plus CoreFoundation
+object construction and manual adherence to the Create/Get ownership rule,
+where leaks and use-after-free on the error paths are easy to write and hard to
+notice. It is also well vetted — the standard binding, used by rustls's
+platform verifier among others — and its five transitive dependencies are all
+foundational Apple and `libc` bindings.
+
+Shelling out to `/usr/bin/security` is rejected outright: it would place secret
+values in process arguments, visible to any process via `ps`.
+
+Rust stable, edition 2024.
 
 ## Security notes
 
