@@ -27,6 +27,8 @@ enum Commands {
         #[arg(required = true, value_name = "KEY=VALUE")]
         assignments: Vec<String>,
     },
+    /// List the environment's variable names, one per line.
+    List,
     /// Import variables from a .env file, then offer to delete it.
     Import {
         /// Path to the .env file to read.
@@ -61,6 +63,12 @@ fn run(cli: Cli) -> Result<()> {
             let count = cmd::set(&store, &environment, &assignments)?;
             let plural = if count == 1 { "" } else { "s" };
             eprintln!("Stored {count} variable{plural} in environment {environment:?}");
+            Ok(())
+        }
+        Commands::List => {
+            for key in cmd::list(&store, &environment)? {
+                println!("{key}");
+            }
             Ok(())
         }
         Commands::Import { path } => {

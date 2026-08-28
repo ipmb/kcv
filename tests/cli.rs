@@ -359,3 +359,62 @@ fn a_multiline_quoted_value_survives_import() {
     );
     std::fs::remove_file(&f).ok();
 }
+
+#[test]
+fn list_prints_variable_names_one_per_line_sorted() {
+    let kc = TempKeychain::create("list");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "ZED=1", "ALPHA=2", "MID=3"])
+        .status()
+        .unwrap();
+    let out = kc.cmd().args(["-e", "myproject", "list"]).output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "ALPHA\nMID\nZED\n");
+}
+
+#[test]
+fn list_never_prints_a_value() {
+    let kc = TempKeychain::create("listquiet");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "TOKEN=sup3rs3cret"])
+        .status()
+        .unwrap();
+    let out = kc.cmd().args(["-e", "myproject", "list"]).output().unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !combined.contains("sup3rs3cret"),
+        "value leaked: {combined}"
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "TOKEN\n");
+}
+
+#[test]
+fn list_of_a_missing_environment_fails() {
+    let kc = TempKeychain::create("listmissing");
+    let out = kc.cmd().args(["-e", "nope", "list"]).output().unwrap();
+    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("nope"));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "",
+        "stdout stays clean"
+    );
+}
+
+#[test]
+fn list_output_pipes_cleanly() {
+    // Nothing but names on stdout, so a count is exactly the variable count.
+    let kc = TempKeychain::create("listpipe");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "A=1", "B=2", "C=3"])
+        .status()
+        .unwrap();
+    let out = kc.cmd().args(["-e", "myproject", "list"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert_eq!(stdout.lines().collect::<Vec<_>>(), vec!["A", "B", "C"]);
+}

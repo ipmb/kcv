@@ -53,6 +53,33 @@ stored data untouched.
 
 `set` reports the number of variables written. It does not print values.
 
+### list
+
+```sh
+kcv -e myproject list
+```
+
+Prints the environment's variable names, sorted, one per line. Values are not
+printed, so the output is safe to show on a screen share and safe to paste into
+a log:
+
+```
+API_KEY
+DATABASE_URL
+REGION
+```
+
+Nothing but names goes to stdout, so it pipes:
+
+```sh
+kcv -e myproject list | grep DATABASE
+kcv -e myproject list | wc -l
+```
+
+Listing reads the keychain item, so it costs one authorization like any other
+read. The names are stored inside the encrypted blob and cannot be retrieved
+without decrypting it.
+
 ### import
 
 ```sh
@@ -148,8 +175,8 @@ later reads succeed over SSH.
 
 Values are held in ordinary heap allocations and are not zeroed after use.
 
-There is no command to list, read back, or delete stored variables. Those are
-planned but not implemented.
+There is no command to read back a single value, delete a variable, or list the
+environments that exist. Those are planned but not implemented.
 
 ## Development
 

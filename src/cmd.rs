@@ -56,6 +56,16 @@ pub fn set(store: &dyn Store, environment: &str, assignments: &[String]) -> Resu
     Ok(resolved.len())
 }
 
+/// Returns the environment's variable names, sorted. Values are deliberately
+/// not returned: nothing in kcv writes a secret to stdout.
+pub fn list(store: &dyn Store, environment: &str) -> Result<Vec<String>> {
+    validate_environment(environment)?;
+    let env_set = load_env_set(store, environment)?
+        .ok_or_else(|| Error::EnvironmentNotFound(environment.to_string()))?;
+    // EnvSet is backed by a BTreeMap, so iteration is already sorted.
+    Ok(env_set.iter().map(|(key, _)| key.clone()).collect())
+}
+
 /// Reads a `.env` file and merges it into an environment, returning how many
 /// variables were written. Like `set`, everything is resolved before anything
 /// is stored, so a malformed file leaves the environment untouched.
@@ -358,6 +368,66 @@ mod tests {
         import(&store, "myproject", &f).unwrap();
         assert!(f.exists(), "import must not delete the file itself");
         std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn list_returns_variable_names_in_sorted_order() {
+        let store = MemStore::new();
+        set(
+            &store,
+            "myproject",
+            &[
+                "ZED=1".to_string(),
+                "ALPHA=2".to_string(),
+                "MID=3".to_string(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            list(&store, "myproject").unwrap(),
+            vec!["ALPHA".to_string(), "MID".to_string(), "ZED".to_string()]
+        );
+    }
+
+    #[test]
+    fn list_does_not_return_values() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["TOKEN=sup3rs3cret".to_string()]).unwrap();
+        let names = list(&store, "myproject").unwrap();
+        assert_eq!(names, vec!["TOKEN".to_string()]);
+        assert!(
+            !names.iter().any(|n| n.contains("sup3rs3cret")),
+            "a value must never appear in the listing"
+        );
+    }
+
+    #[test]
+    fn list_on_a_missing_environment_is_an_error() {
+        let store = MemStore::new();
+        assert!(matches!(
+            list(&store, "absent"),
+            Err(Error::EnvironmentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn list_rejects_an_invalid_environment_name() {
+        let store = MemStore::new();
+        assert!(matches!(
+            list(&store, ""),
+            Err(Error::InvalidEnvironmentName(_))
+        ));
+    }
+
+    #[test]
+    fn list_reflects_keys_added_by_a_later_set() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["FIRST=1".to_string()]).unwrap();
+        set(&store, "myproject", &["SECOND=2".to_string()]).unwrap();
+        assert_eq!(
+            list(&store, "myproject").unwrap(),
+            vec!["FIRST".to_string(), "SECOND".to_string()]
+        );
     }
 
     #[test]

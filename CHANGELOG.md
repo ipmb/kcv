@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `list` command, printing an environment's variable names sorted, one per line,
+  to stdout. Values are not printed. A missing environment is an error rather
+  than empty output.
 - `import` command, reading variables from a `.env` file and merging them into
   an environment. After a successful import it asks whether to delete the file,
   defaulting to no. Without a terminal the file is kept and a note is written to
