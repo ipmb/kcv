@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get` command, printing one variable's value to stdout followed by a newline,
+  so that command substitution captures the value exactly. An unknown name is
+  an error with empty stdout.
+- `export` command, printing the whole environment to stdout in `.env` format,
+  sorted. Values are always quoted and escaped by the inverse of the parser
+  `import` uses, so an export reads back unchanged.
 - `environments` command, with the alias `envs`, printing every environment
   name sorted, one per line. It searches keychain attributes rather than
   decrypting item data, so it is the only read that needs no authorization.
@@ -28,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stripped from unquoted values, so a `#` in a password survives.
 
 - CI reports test coverage and fails when line coverage drops below 90%.
+
+### Changed
+
+- `get` and `export` write secret values to stdout. Until now no command wrote a
+  value to its output. Every other command still does not.
 
 ### Fixed
 

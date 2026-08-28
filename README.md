@@ -80,6 +80,51 @@ Listing reads the keychain item, so it costs one authorization like any other
 read. The names are stored inside the encrypted blob and cannot be retrieved
 without decrypting it.
 
+### get
+
+```sh
+kcv -e myproject get API_KEY
+export GITHUB_TOKEN="$(kcv -e myproject get GITHUB_TOKEN)"
+```
+
+Prints one variable's value to stdout, followed by a newline. Command
+substitution strips that newline, so the second form captures the value
+exactly.
+
+A name that is not present is an error with exit 1, and stdout stays empty, so
+a failure cannot be mistaken for an empty value.
+
+Because output is line-oriented, a value that itself ends in a newline reads
+the same as one that does not. Use `export` when that distinction matters.
+
+### export
+
+```sh
+kcv -e myproject export
+kcv -e myproject export > .env
+```
+
+Prints the whole environment to stdout in `.env` format, sorted:
+
+```
+API_KEY="abc123"
+PEM="-----BEGIN-----\nmiddle line\n-----END-----"
+```
+
+Values are always quoted and escaped, even when quoting looks unnecessary. The
+output is produced by the inverse of the parser `import` uses, so it reads back
+exactly:
+
+```sh
+kcv -e source export > /tmp/env && kcv -e target import /tmp/env
+```
+
+To load an export into the current shell:
+
+```sh
+set -a; source <(kcv -e myproject export); set +a
+```
+
 ### unset
 
 ```sh
@@ -205,8 +250,9 @@ dialog. `environments` is unaffected, since it never decrypts item data.
 
 Values are held in ordinary heap allocations and are not zeroed after use.
 
-There is no command to read back a single value. That is planned but not
-implemented.
+`get` and `export` write secret values to stdout. Every other command keeps
+values out of its output. Redirect them deliberately, and remember that a
+terminal keeps scrollback.
 
 ## Development
 

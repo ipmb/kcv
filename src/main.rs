@@ -29,6 +29,14 @@ enum Commands {
     },
     /// List the environment's variable names, one per line.
     List,
+    /// Print one variable's value to stdout.
+    Get {
+        /// Name of the variable to read.
+        #[arg(value_name = "KEY")]
+        key: String,
+    },
+    /// Print the whole environment to stdout in .env format.
+    Export,
     /// List every environment, one per line.
     #[command(visible_alias = "envs")]
     Environments,
@@ -88,6 +96,17 @@ fn run(cli: Cli) -> Result<()> {
             for key in cmd::list(&store, &environment)? {
                 println!("{key}");
             }
+            Ok(())
+        }
+        Commands::Get { key } => {
+            let environment = environment()?;
+            println!("{}", cmd::get(&store, &environment, &key)?);
+            Ok(())
+        }
+        Commands::Export => {
+            let environment = environment()?;
+            // format already ends every line, so print without adding another.
+            print!("{}", cmd::export(&store, &environment)?);
             Ok(())
         }
         Commands::Unset { keys } => {

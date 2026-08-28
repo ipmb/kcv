@@ -519,3 +519,115 @@ fn unsetting_the_last_variable_removes_the_environment() {
         .unwrap();
     assert!(!out.status.success(), "the environment should be gone");
 }
+
+#[test]
+fn get_prints_a_single_value() {
+    let kc = TempKeychain::create("get");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "API_KEY=abc123", "OTHER=x"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "get", "API_KEY"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "abc123\n");
+}
+
+#[test]
+fn get_is_usable_in_command_substitution() {
+    let kc = TempKeychain::create("getsubst");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "TOKEN=value-with-no-newline"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "get", "TOKEN"])
+        .output()
+        .unwrap();
+    // Command substitution strips the trailing newline, leaving the value.
+    let captured = String::from_utf8_lossy(&out.stdout).trim_end().to_string();
+    assert_eq!(captured, "value-with-no-newline");
+}
+
+#[test]
+fn get_of_an_unknown_key_fails_with_empty_stdout() {
+    let kc = TempKeychain::create("getmissing");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "A=1"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "get", "NOPE"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "",
+        "a failure must not look like an empty value"
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("NOPE"));
+}
+
+#[test]
+fn export_emits_parseable_dotenv() {
+    let kc = TempKeychain::create("export");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "ZED=1", "ALPHA=two words"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "export"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "ALPHA=\"two words\"\nZED=\"1\"\n"
+    );
+}
+
+#[test]
+fn export_output_can_be_imported_into_another_environment() {
+    let kc = TempKeychain::create("exportimport");
+    kc.cmd()
+        .args([
+            "-e",
+            "source",
+            "set",
+            "PLAIN=simple",
+            "PEM=-----BEGIN-----\nmiddle\n-----END-----",
+            "QUOTED=has \"quotes\" here",
+            "EMPTY=",
+        ])
+        .status()
+        .unwrap();
+
+    let out = kc.cmd().args(["-e", "source", "export"]).output().unwrap();
+    assert!(out.status.success());
+
+    let mut path = std::env::temp_dir();
+    path.push(format!("kcv-export-{}.env", std::process::id()));
+    std::fs::write(&path, &out.stdout).unwrap();
+
+    kc.cmd()
+        .args(["-e", "target", "import"])
+        .arg(&path)
+        .status()
+        .unwrap();
+
+    let source = kc.cmd().args(["-e", "source", "export"]).output().unwrap();
+    let target = kc.cmd().args(["-e", "target", "export"]).output().unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&source.stdout),
+        String::from_utf8_lossy(&target.stdout),
+        "a full export/import cycle must preserve every value"
+    );
+    std::fs::remove_file(&path).ok();
+}

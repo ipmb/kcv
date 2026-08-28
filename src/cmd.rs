@@ -56,6 +56,39 @@ pub fn set(store: &dyn Store, environment: &str, assignments: &[String]) -> Resu
     Ok(resolved.len())
 }
 
+/// Returns one variable's value.
+///
+/// This is one of two commands that put a secret on stdout; every other
+/// command keeps values out of its output entirely.
+pub fn get(store: &dyn Store, environment: &str, key: &str) -> Result<String> {
+    validate_environment(environment)?;
+    let env_set = load_env_set(store, environment)?
+        .ok_or_else(|| Error::EnvironmentNotFound(environment.to_string()))?;
+    env_set
+        .iter()
+        .find(|(k, _)| k.as_str() == key)
+        .map(|(_, v)| v.clone())
+        .ok_or_else(|| Error::KeyNotFound {
+            environment: environment.to_string(),
+            key: key.to_string(),
+        })
+}
+
+/// Renders the whole environment as a `.env` document, sorted.
+///
+/// The output is produced by `dotenv::format`, the inverse of the parser
+/// `import` uses, so it can be read straight back in.
+pub fn export(store: &dyn Store, environment: &str) -> Result<String> {
+    validate_environment(environment)?;
+    let env_set = load_env_set(store, environment)?
+        .ok_or_else(|| Error::EnvironmentNotFound(environment.to_string()))?;
+    let pairs: Vec<(String, String)> = env_set
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Ok(crate::dotenv::format(&pairs))
+}
+
 /// Every environment that exists, sorted. Reads keychain attributes only, so
 /// unlike every other read this needs no authorization.
 pub fn environments(store: &dyn Store) -> Result<Vec<String>> {
@@ -557,6 +590,95 @@ mod tests {
     fn environments_is_empty_when_nothing_is_stored() {
         let store = MemStore::new();
         assert_eq!(environments(&store).unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn get_returns_the_value() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["API_KEY=abc123".to_string()]).unwrap();
+        assert_eq!(get(&store, "myproject", "API_KEY").unwrap(), "abc123");
+    }
+
+    #[test]
+    fn get_returns_special_characters_intact() {
+        let store = MemStore::new();
+        let value = "line1\nline2\t\"quoted\" café";
+        set(&store, "myproject", &[format!("PEM={value}")]).unwrap();
+        assert_eq!(get(&store, "myproject", "PEM").unwrap(), value);
+    }
+
+    #[test]
+    fn get_of_an_unknown_key_is_an_error() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["A=1".to_string()]).unwrap();
+        let err = get(&store, "myproject", "MISSING").unwrap_err();
+        assert!(matches!(err, Error::KeyNotFound { .. }));
+        assert!(err.to_string().contains("MISSING"), "{err}");
+    }
+
+    #[test]
+    fn get_on_a_missing_environment_is_an_error() {
+        let store = MemStore::new();
+        assert!(matches!(
+            get(&store, "absent", "K"),
+            Err(Error::EnvironmentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn export_emits_sorted_dotenv_lines() {
+        let store = MemStore::new();
+        set(
+            &store,
+            "myproject",
+            &["ZED=1".to_string(), "ALPHA=2".to_string()],
+        )
+        .unwrap();
+        assert_eq!(
+            export(&store, "myproject").unwrap(),
+            "ALPHA=\"2\"\nZED=\"1\"\n"
+        );
+    }
+
+    #[test]
+    fn export_round_trips_back_through_import() {
+        let store = MemStore::new();
+        set(
+            &store,
+            "source",
+            &[
+                "PLAIN=simple".to_string(),
+                "PEM=-----BEGIN-----\nmiddle\n-----END-----".to_string(),
+                "QUOTED=has \"quotes\" and \\backslash".to_string(),
+                "EMPTY=".to_string(),
+            ],
+        )
+        .unwrap();
+
+        let text = export(&store, "source").unwrap();
+        let pairs = crate::dotenv::parse(&text).expect("export output must parse");
+
+        let target = MemStore::new();
+        let mut env_set = crate::envset::EnvSet::new();
+        for (k, v) in &pairs {
+            env_set.insert(k, v).unwrap();
+        }
+        target.save("target", &env_set.to_json()).unwrap();
+
+        assert_eq!(
+            export(&target, "target").unwrap(),
+            text,
+            "a value must survive export, parse and re-export unchanged"
+        );
+    }
+
+    #[test]
+    fn export_on_a_missing_environment_is_an_error() {
+        let store = MemStore::new();
+        assert!(matches!(
+            export(&store, "absent"),
+            Err(Error::EnvironmentNotFound(_))
+        ));
     }
 
     #[test]

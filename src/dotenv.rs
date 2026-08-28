@@ -32,6 +32,39 @@ fn word_at(c: &[char], i: usize, word: &str) -> bool {
     matches!(c[i + w.len()], ' ' | '\t')
 }
 
+/// Escapes a value for a double-quoted `.env` field. Emits exactly the
+/// escapes `parse` understands, which is what makes the two inverses.
+fn escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Renders key/value pairs as a `.env` document, in the order given.
+///
+/// Values are always quoted, even when quoting looks unnecessary. Deciding
+/// when quotes can be omitted is where a formatter grows bugs, and the output
+/// is meant to be re-read by `parse` rather than admired.
+pub fn format(pairs: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (key, value) in pairs {
+        out.push_str(key);
+        out.push_str("=\"");
+        out.push_str(&escape(value));
+        out.push_str("\"\n");
+    }
+    out
+}
+
 /// Parses a `.env` document into ordered key/value pairs.
 pub fn parse(text: &str) -> Result<Vec<(String, String)>, ParseError> {
     let c: Vec<char> = text.chars().collect();
@@ -167,6 +200,68 @@ mod tests {
 
     fn ok(text: &str) -> Vec<(String, String)> {
         parse(text).expect("should parse")
+    }
+
+    /// Values chosen to break a naive formatter.
+    fn nasty_values() -> Vec<(String, String)> {
+        [
+            ("PLAIN", "simple"),
+            ("EMPTY", ""),
+            ("SPACES", "  padded value  "),
+            ("QUOTE", "has\"double\" quotes"),
+            ("SINGLE", "has 'single' quotes"),
+            ("BACKSLASH", r"c:\path\to\thing"),
+            ("NEWLINE", "line1\nline2\nline3"),
+            ("TAB", "before\tafter"),
+            ("CARRIAGE", "before\rafter"),
+            ("HASH", "hunter2#notacomment"),
+            ("EQUALS", "https://x/?a=b&c=d"),
+            ("UNICODE", "café ☕ 日本語"),
+            ("PEM", "-----BEGIN-----\nMIIDline\n-----END-----"),
+            ("TRAILING_SPACE", "value "),
+            ("ONLY_BACKSLASH", "\\"),
+            ("QUOTE_AT_END", "ends with a quote\""),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+    }
+
+    #[test]
+    fn format_round_trips_through_parse() {
+        let original = nasty_values();
+        let text = format(&original);
+        let reparsed = parse(&text).expect("our own output must parse");
+        assert_eq!(
+            reparsed, original,
+            "every value must survive format then parse unchanged"
+        );
+    }
+
+    #[test]
+    fn format_always_quotes_and_escapes() {
+        let pairs = vec![("K".to_string(), "a\"b\\c\nd".to_string())];
+        assert_eq!(format(&pairs), "K=\"a\\\"b\\\\c\\nd\"\n");
+    }
+
+    #[test]
+    fn format_quotes_even_a_plain_value() {
+        let pairs = vec![("K".to_string(), "plain".to_string())];
+        assert_eq!(format(&pairs), "K=\"plain\"\n");
+    }
+
+    #[test]
+    fn format_emits_one_line_per_pair_in_the_order_given() {
+        let pairs = vec![
+            ("A".to_string(), "1".to_string()),
+            ("B".to_string(), "2".to_string()),
+        ];
+        assert_eq!(format(&pairs), "A=\"1\"\nB=\"2\"\n");
+    }
+
+    #[test]
+    fn format_of_nothing_is_empty() {
+        assert_eq!(format(&[]), "");
     }
 
     #[test]
