@@ -53,6 +53,33 @@ stored data untouched.
 
 `set` reports the number of variables written. It does not print values.
 
+### import
+
+```sh
+kcv -e myproject import .env
+```
+
+Reads a `.env` file and merges its variables into the environment, then asks
+whether to delete the file:
+
+```
+Imported 7 variables into environment "myproject"
+Delete .env? [y/N]
+```
+
+The answer defaults to no, so pressing Return keeps the file. When there is no
+terminal to ask on, the file is kept and a line on stderr says so. A file that
+fails to parse is never partially imported, and is never deleted.
+
+The parser handles comments, blank lines, an optional `export ` prefix, and
+single- and double-quoted values. Inside double quotes, `\n`, `\t`, `\r`,
+`\"`, and `\\` are interpreted and the value may span lines. Single-quoted
+values are literal. Unquoted values run to the end of the line.
+
+Inline comments are not stripped from unquoted values, so
+`PASSWORD=hunter2#x` stores `hunter2#x`. Quote the value if you want a trailing
+comment.
+
 ### exec
 
 ```sh

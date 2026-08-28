@@ -1,4 +1,5 @@
 pub mod cmd;
+pub mod dotenv;
 pub mod envset;
 pub mod error;
 pub mod prompt;

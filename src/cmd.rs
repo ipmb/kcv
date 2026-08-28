@@ -56,6 +56,41 @@ pub fn set(store: &dyn Store, environment: &str, assignments: &[String]) -> Resu
     Ok(resolved.len())
 }
 
+/// Reads a `.env` file and merges it into an environment, returning how many
+/// variables were written. Like `set`, everything is resolved before anything
+/// is stored, so a malformed file leaves the environment untouched.
+///
+/// Deleting the source file is deliberately not done here. That is a
+/// destructive act needing a human answer, so it lives with the caller.
+pub fn import(store: &dyn Store, environment: &str, path: &std::path::Path) -> Result<usize> {
+    validate_environment(environment)?;
+    let display = path.display().to_string();
+
+    let text = std::fs::read_to_string(path).map_err(|source| Error::ReadFile {
+        path: display.clone(),
+        source,
+    })?;
+
+    let pairs = crate::dotenv::parse(&text).map_err(|e| Error::Dotenv {
+        path: display.clone(),
+        line: e.line,
+        reason: e.reason,
+    })?;
+
+    // Importing nothing and then offering to delete the file would be a good
+    // way to lose a file for no gain.
+    if pairs.is_empty() {
+        return Err(Error::EmptyImport(display));
+    }
+
+    let mut env_set = load_env_set(store, environment)?.unwrap_or_default();
+    for (key, value) in &pairs {
+        env_set.insert(key, value)?;
+    }
+    store.save(environment, &env_set.to_json())?;
+    Ok(pairs.len())
+}
+
 /// What `exec` will run: the program, its arguments, and the complete
 /// environment the child receives.
 #[derive(Debug, PartialEq, Eq)]
@@ -236,6 +271,93 @@ mod tests {
             Err(Error::InvalidEnvironmentName(_))
         ));
         assert!(validate_environment("has\0nul").is_err());
+    }
+
+    fn write_temp(name: &str, contents: &str) -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("kcv-import-{}-{}.env", name, std::process::id()));
+        std::fs::write(&p, contents).unwrap();
+        p
+    }
+
+    #[test]
+    fn import_creates_an_environment() {
+        let store = MemStore::new();
+        let f = write_temp("create", "FOO=bar\nBAZ=qux\n");
+        assert_eq!(import(&store, "myproject", &f).unwrap(), 2);
+        let loaded = load_env_set(&store, "myproject").unwrap().unwrap();
+        let map: BTreeMap<_, _> = loaded.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        assert_eq!(map["FOO"], "bar");
+        assert_eq!(map["BAZ"], "qux");
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn import_merges_with_existing_variables() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["KEEP=untouched".to_string()]).unwrap();
+        let f = write_temp("merge", "ADDED=new\n");
+        import(&store, "myproject", &f).unwrap();
+        let loaded = load_env_set(&store, "myproject").unwrap().unwrap();
+        let map: BTreeMap<_, _> = loaded.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        assert_eq!(map["KEEP"], "untouched");
+        assert_eq!(map["ADDED"], "new");
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn import_overwrites_a_key_that_already_exists() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["FOO=old".to_string()]).unwrap();
+        let f = write_temp("overwrite", "FOO=new\n");
+        import(&store, "myproject", &f).unwrap();
+        let loaded = load_env_set(&store, "myproject").unwrap().unwrap();
+        assert_eq!(loaded.iter().next().unwrap().1, "new");
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn a_malformed_file_writes_nothing() {
+        let store = MemStore::new();
+        let f = write_temp("malformed", "GOOD=1\ngarbage\n");
+        let err = import(&store, "myproject", &f).unwrap_err();
+        assert!(matches!(err, Error::Dotenv { line: 2, .. }));
+        assert!(err.to_string().contains(":2:"), "{err}");
+        assert_eq!(
+            store.load("myproject").unwrap(),
+            None,
+            "nothing was written"
+        );
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn an_empty_file_is_an_error() {
+        let store = MemStore::new();
+        let f = write_temp("empty", "# only a comment\n\n");
+        assert!(matches!(
+            import(&store, "myproject", &f),
+            Err(Error::EmptyImport(_))
+        ));
+        std::fs::remove_file(&f).ok();
+    }
+
+    #[test]
+    fn a_missing_file_names_the_path() {
+        let store = MemStore::new();
+        let missing = std::path::Path::new("/nonexistent/kcv/does-not-exist.env");
+        let err = import(&store, "myproject", missing).unwrap_err();
+        assert!(matches!(err, Error::ReadFile { .. }));
+        assert!(err.to_string().contains("does-not-exist.env"), "{err}");
+    }
+
+    #[test]
+    fn import_leaves_the_source_file_alone() {
+        let store = MemStore::new();
+        let f = write_temp("keepfile", "FOO=bar\n");
+        import(&store, "myproject", &f).unwrap();
+        assert!(f.exists(), "import must not delete the file itself");
+        std::fs::remove_file(&f).ok();
     }
 
     #[test]

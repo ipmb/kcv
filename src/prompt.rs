@@ -1,7 +1,5 @@
 use crate::error::Result;
-use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::io::AsRawFd;
 
 /// Strips a single trailing newline, and the `\r` of a preceding CRLF.
 /// Internal and leading whitespace is preserved: a secret may legitimately
@@ -66,21 +64,43 @@ fn read_secret_from<R: Read>(reader: &mut R) -> Result<String> {
     Ok(trim_line(&line).to_string())
 }
 
+/// True when standard input is a terminal, meaning a prompt can be answered.
+pub fn is_tty() -> bool {
+    unsafe { libc::isatty(libc::STDIN_FILENO) == 1 }
+}
+
+/// Interprets an answer to a yes/no question. Anything other than y or yes,
+/// including an empty line, means no.
+fn parse_confirm(answer: &str) -> bool {
+    matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+}
+
+/// Asks a yes/no question on the terminal, defaulting to no. Echo stays on:
+/// the answer is not a secret. Callers must check `is_tty` first.
+pub fn confirm(question: &str) -> Result<bool> {
+    eprint!("{question} [y/N] ");
+    std::io::stderr().flush()?;
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(parse_confirm(&line))
+}
+
 /// Prompts for a secret without echoing it. Falls back to reading stdin when
 /// stdin is not a terminal, so `echo secret | kcv -e prod set FOO` works.
 pub fn read_secret(key: &str) -> Result<String> {
-    let stdin_is_tty = unsafe { libc::isatty(libc::STDIN_FILENO) == 1 };
-    if !stdin_is_tty {
+    if !is_tty() {
         return read_secret_from(&mut std::io::stdin());
     }
 
-    let tty = File::options().read(true).write(true).open("/dev/tty")?;
     eprint!("Value for {key}: ");
     std::io::stderr().flush()?;
 
-    let _guard = EchoGuard::disable_echo(tty.as_raw_fd())?;
+    // Read from stdin rather than /dev/tty: we already know stdin is a
+    // terminal, and /dev/tty fails with ENXIO for a process that has no
+    // controlling terminal even when its stdin is a tty.
+    let _guard = EchoGuard::disable_echo(libc::STDIN_FILENO)?;
     let mut line = String::new();
-    BufReader::new(&tty).read_line(&mut line)?;
+    std::io::stdin().read_line(&mut line)?;
     // The user's Return was not echoed, so emit the newline ourselves.
     eprintln!();
     Ok(trim_line(&line).to_string())
@@ -109,6 +129,16 @@ mod tests {
     fn reads_a_secret_from_a_non_tty_reader() {
         let mut input = &b"piped-secret\n"[..];
         assert_eq!(read_secret_from(&mut input).unwrap(), "piped-secret");
+    }
+
+    #[test]
+    fn only_y_and_yes_confirm() {
+        for yes in ["y", "Y", "yes", "YES", " yes \n", "y\n"] {
+            assert!(parse_confirm(yes), "{yes:?} should confirm");
+        }
+        for no in ["", "\n", "n", "no", "N", "sure", "yep", "1", "yesterday"] {
+            assert!(!parse_confirm(no), "{no:?} should not confirm");
+        }
     }
 
     #[test]

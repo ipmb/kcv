@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `import` command, reading variables from a `.env` file and merging them into
+  an environment. After a successful import it asks whether to delete the file,
+  defaulting to no. Without a terminal the file is kept and a note is written to
+  stderr. A file that fails to parse is neither partially imported nor deleted.
+- Dotenv parsing covering comments, blank lines, an optional `export ` prefix,
+  single- and double-quoted values, `\n` `\t` `\r` `\"` `\\` escapes inside
+  double quotes, and quoted values spanning lines. Inline comments are not
+  stripped from unquoted values, so a `#` in a password survives.
+
+### Fixed
+
+- Prompts read from standard input rather than `/dev/tty`. Opening `/dev/tty`
+  fails with `ENXIO` for a process that has a terminal on stdin but no
+  controlling terminal, which made the hidden-value prompt unusable in some
+  environments.
+
 ## [0.1.0] - 2026-08-27
 
 ### Added

@@ -217,3 +217,145 @@ fn a_multiline_value_survives_the_round_trip() {
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout), "line1\nline2\nline3");
 }
+
+fn write_env_file(tag: &str, contents: &str) -> PathBuf {
+    let mut p = std::env::temp_dir();
+    p.push(format!("kcv-cli-import-{}-{}.env", tag, std::process::id()));
+    std::fs::write(&p, contents).unwrap();
+    p
+}
+
+#[test]
+fn import_loads_a_dotenv_file_and_exec_reads_it_back() {
+    let kc = TempKeychain::create("import");
+    let f = write_env_file(
+        "basic",
+        "# a comment\nexport GREETING=hello\nQUOTED=\"spaced value\"\nURL=https://x/?a=b\n",
+    );
+
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "import"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("Imported 3 variables"), "{stderr}");
+
+    let out = kc
+        .cmd()
+        .args([
+            "-e",
+            "myproject",
+            "exec",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s|%s|%s' \"$GREETING\" \"$QUOTED\" \"$URL\"",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "hello|spaced value|https://x/?a=b"
+    );
+    std::fs::remove_file(&f).ok();
+}
+
+#[test]
+fn import_keeps_the_file_when_there_is_no_terminal_to_ask() {
+    let kc = TempKeychain::create("importkeep");
+    let f = write_env_file("keep", "FOO=bar\n");
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "import"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(f.exists(), "the file must survive when nobody was asked");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("Kept"), "{stderr}");
+    std::fs::remove_file(&f).ok();
+}
+
+#[test]
+fn import_never_prints_a_value() {
+    let kc = TempKeychain::create("importquiet");
+    let f = write_env_file("quiet", "TOKEN=sup3rs3cret\n");
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "import"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !combined.contains("sup3rs3cret"),
+        "value leaked: {combined}"
+    );
+    std::fs::remove_file(&f).ok();
+}
+
+#[test]
+fn a_malformed_file_fails_and_names_the_line() {
+    let kc = TempKeychain::create("importbad");
+    let f = write_env_file("bad", "GOOD=1\nthis line has no equals\n");
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "import"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains(":2:"), "{stderr}");
+    assert!(f.exists(), "a failed import must not delete the file");
+
+    // Nothing should have been stored.
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "exec", "--", "true"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "the environment should not exist");
+    std::fs::remove_file(&f).ok();
+}
+
+#[test]
+fn a_multiline_quoted_value_survives_import() {
+    let kc = TempKeychain::create("importpem");
+    let f = write_env_file("pem", "PEM=\"-----BEGIN-----\nmiddle\n-----END-----\"\n");
+    kc.cmd()
+        .args(["-e", "myproject", "import"])
+        .arg(&f)
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args([
+            "-e",
+            "myproject",
+            "exec",
+            "--",
+            "sh",
+            "-c",
+            "printf %s \"$PEM\"",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "-----BEGIN-----\nmiddle\n-----END-----"
+    );
+    std::fs::remove_file(&f).ok();
+}

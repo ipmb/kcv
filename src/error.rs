@@ -10,6 +10,16 @@ pub enum Error {
     InvalidKey(String),
     EnvironmentNotFound(String),
     CorruptItem(String),
+    Dotenv {
+        path: String,
+        line: usize,
+        reason: String,
+    },
+    EmptyImport(String),
+    ReadFile {
+        path: String,
+        source: std::io::Error,
+    },
     Keychain(security_framework::base::Error),
     Io(std::io::Error),
     Exec {
@@ -58,6 +68,11 @@ impl fmt::Display for Error {
                 "the keychain item for environment {e:?} is not valid kcv data; \
                  refusing to overwrite it"
             ),
+            Error::Dotenv { path, line, reason } => {
+                write!(f, "{path}:{line}: {reason}")
+            }
+            Error::EmptyImport(p) => write!(f, "no variables found in {p}"),
+            Error::ReadFile { path, source } => write!(f, "{path}: {source}"),
             Error::Keychain(e) => write!(f, "keychain error: {e}"),
             Error::Io(e) => write!(f, "{e}"),
             Error::Exec { program, source } => write!(f, "cannot execute {program:?}: {source}"),
