@@ -1,2 +1,14 @@
-target
-dist
+# Rust build output
+/target
+/dist
+
+# rustfmt backups
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# Keychain files. The tests create these under $TMPDIR and clean up after
+# themselves, but a stray one must never be committed.
+*.keychain
+*.keychain-db
