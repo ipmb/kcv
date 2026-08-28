@@ -104,35 +104,6 @@ this.
 | 127 | The command was not found |
 | other | Passed through from the executed command |
 
-## Limits
-
-A keychain item holds far more than `exec` can pass on. Measured on an Apple
-Silicon Mac:
-
-| Limit | Value |
-|---|---|
-| Keychain item | At least 64 MB. No failure was observed |
-| `exec` | About 1 MB, set by `ARG_MAX` (1048576 bytes) |
-
-The `exec` limit applies to the whole child environment at once: every variable
-name and value, plus the inherited environment, plus the command's own
-arguments. Exceeding it fails with `Argument list too long` and exit code 126.
-Note the asymmetry: `set` will store data that `exec` cannot then pass on.
-
-Because the entire item is read on each invocation, time per `exec` grows with
-the stored size:
-
-| Stored data | Time per `exec` |
-|---|---|
-| 20 variables, about 800 bytes | 17 ms |
-| 16 KB | 22 ms |
-| 256 KB | 33 ms |
-| 1000 KB | 62 ms |
-
-About 17 ms of this is fixed cost: process startup plus one keychain read. These
-figures are for an authorized binary against an unlocked keychain and do not
-include the authorization dialog.
-
 ## Limitations
 
 Secrets are placed in the child process's environment block, which other
