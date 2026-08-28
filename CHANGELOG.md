@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-28
+
 ### Added
 
 - `get` command, printing one variable's value to stdout followed by a newline,
@@ -93,5 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stored data unchanged.
 - A stored item that cannot be parsed is an error rather than being overwritten.
 
-[Unreleased]: https://github.com/ipmb/kcv/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ipmb/kcv/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ipmb/kcv/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ipmb/kcv/releases/tag/v0.1.0
