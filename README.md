@@ -4,12 +4,17 @@ Stores environment variables in the macOS keychain and injects them into a
 process.
 
 ```sh
-kcv --environment prod set DATABASE_URL=postgres://localhost/app
-kcv --environment prod exec -- ./server --port 8000
+kcv --environment myproject set DATABASE_URL=postgres://localhost/app
+kcv --environment myproject exec -- ./server --port 8000
 ```
 
 Each environment is stored as a single keychain item, so reading one requires a
 single authorization regardless of how many variables it holds.
+
+`kcv` is designed for local development: keeping the secrets a project needs on
+the machine you work on, instead of in a `.env` file on disk. It is not built
+for servers or CI, which have no login keychain and no way to answer an
+authorization prompt.
 
 macOS only. `kcv` links against the system Security framework.
 
@@ -28,10 +33,10 @@ Requires a Rust toolchain. The binary has no runtime dependencies.
 ### set
 
 ```sh
-kcv -e prod set API_KEY=abc123
-kcv -e prod set API_KEY=abc123 REGION=us-east-1
-kcv -e prod set API_KEY
-echo "$TOKEN" | kcv -e prod set API_KEY
+kcv -e myproject set API_KEY=abc123
+kcv -e myproject set API_KEY=abc123 REGION=us-east-1
+kcv -e myproject set API_KEY
+echo "$TOKEN" | kcv -e myproject set API_KEY
 ```
 
 Arguments are split on the first `=`, so values may contain `=`. An empty value
@@ -51,8 +56,8 @@ stored data untouched.
 ### exec
 
 ```sh
-kcv -e prod exec -- ./server --port 8000
-kcv -e prod exec -- psql
+kcv -e myproject exec -- ./server --port 8000
+kcv -e myproject exec -- psql
 ```
 
 Everything after `--` is passed through unmodified, including arguments that
