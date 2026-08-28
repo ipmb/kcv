@@ -1,15 +1,13 @@
 # Notes for agents working on kcv
 
-## Environment
+## Requirements
 
-Rust is installed through Homebrew's `rustup`, which is keg-only and does not
-put `cargo` in `~/.cargo/bin`. Every session needs:
+macOS, a stable Rust toolchain supporting edition 2024, and the Xcode command
+line tools. `kcv` links against the system Security framework, so it neither
+builds nor tests on other platforms.
 
-```sh
-export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
-```
-
-Without it `cargo` is not on `PATH` and every build command fails.
+If `cargo` is not found, check how the local toolchain was installed before
+assuming it is missing. Some installers do not put it in `~/.cargo/bin`.
 
 ## Process
 
@@ -61,7 +59,7 @@ a read cost a single authorization. Do not split an environment across items.
 
 ## Things that will bite you
 
-- **Never touch the developer's login keychain in a test.** Tests create a
+- **Never touch the user's login keychain in a test.** Tests create a
   throwaway keychain with `CreateOptions::new().password(...).create(path)` and
   point `kcv` at it with `KCV_KEYCHAIN`, then delete it on drop. This is also
   why the suite needs no GUI prompt and works on CI.

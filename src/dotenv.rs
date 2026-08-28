@@ -315,6 +315,20 @@ mod tests {
     }
 
     #[test]
+    fn handles_the_remaining_escapes() {
+        assert_eq!(
+            ok(r#"A="carriage\rreturn and \'quote'""#),
+            vec![("A".into(), "carriage\rreturn and 'quote'".into())]
+        );
+    }
+
+    #[test]
+    fn a_trailing_backslash_inside_quotes_is_unterminated() {
+        let err = parse("A=\"oops\\").unwrap_err();
+        assert!(err.reason.contains("unterminated"), "{}", err.reason);
+    }
+
+    #[test]
     fn an_unknown_escape_is_kept_verbatim() {
         assert_eq!(ok(r#"A="c:\path""#), vec![("A".into(), r"c:\path".into())]);
     }

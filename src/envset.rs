@@ -120,6 +120,15 @@ mod tests {
     }
 
     #[test]
+    fn reports_emptiness() {
+        let mut set = EnvSet::new();
+        assert!(set.is_empty());
+        assert_eq!(set.len(), 0);
+        set.insert("K", "v").unwrap();
+        assert!(!set.is_empty());
+    }
+
+    #[test]
     fn serialization_is_deterministic() {
         let mut a = EnvSet::new();
         a.insert("B", "2").unwrap();
