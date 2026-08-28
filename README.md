@@ -11,8 +11,10 @@ kcv --environment myproject exec -- ./server --port 8000
 Each environment is stored as a single keychain item, so reading one requires a
 single authorization regardless of how many variables it holds.
 
-`kcv` is designed for local development: keeping the secrets a project needs on
-the machine you work on, instead of in a `.env` file on disk.
+`kcv` is designed for local development. A project's secrets live in the
+encrypted keychain database, readable only by programs you have approved,
+rather than in a plaintext `.env` file that any process running as you can read
+and that is easy to commit or back up by accident.
 
 macOS only. `kcv` links against the system Security framework.
 
