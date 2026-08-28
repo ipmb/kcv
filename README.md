@@ -12,9 +12,7 @@ Each environment is stored as a single keychain item, so reading one requires a
 single authorization regardless of how many variables it holds.
 
 `kcv` is designed for local development: keeping the secrets a project needs on
-the machine you work on, instead of in a `.env` file on disk. It is not built
-for servers or CI, which have no login keychain and no way to answer an
-authorization prompt.
+the machine you work on, instead of in a `.env` file on disk.
 
 macOS only. `kcv` links against the system Security framework.
 
