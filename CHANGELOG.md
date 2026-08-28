@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   double quotes, and quoted values spanning lines. Inline comments are not
   stripped from unquoted values, so a `#` in a password survives.
 
+- CI reports test coverage and fails when line coverage drops below 90%.
+
 ### Fixed
 
 - Prompts read from standard input rather than `/dev/tty`. Opening `/dev/tty`

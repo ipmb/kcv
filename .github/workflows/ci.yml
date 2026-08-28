@@ -38,3 +38,40 @@ jobs:
       # touches the runner's login keychain and never needs a GUI prompt.
       - name: Test
         run: cargo test --verbose
+
+      # Pinned prebuilt binary rather than a marketplace action, so the only
+      # thing this workflow trusts is a specific release of the tool itself.
+      - name: Install cargo-llvm-cov
+        env:
+          LLVM_COV_VERSION: '0.9.0'
+        run: |
+          mkdir -p "$HOME/.cargo/bin"
+          curl -fsSL "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${LLVM_COV_VERSION}/cargo-llvm-cov-universal-apple-darwin.tar.gz" \
+            | tar xzf - -C "$HOME/.cargo/bin"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Coverage
+        shell: bash
+        run: |
+          rustup component add llvm-tools-preview
+
+          # Capture the status rather than letting `set -e` abort, so the
+          # summary is published even when the threshold is not met.
+          set +e
+          cargo llvm-cov --all-targets --fail-under-lines 90 | tee coverage.txt
+          status=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo '## Test coverage'
+            echo
+            echo '```'
+            tail -n 12 coverage.txt
+            echo '```'
+            if [ "$status" -ne 0 ]; then
+              echo
+              echo 'Line coverage fell below the 90% threshold.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$status"

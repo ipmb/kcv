@@ -2,6 +2,10 @@
 /target
 /dist
 
+# coverage output
+coverage.txt
+lcov.info
+
 # rustfmt backups
 **/*.rs.bk
 

@@ -90,7 +90,16 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-All three must pass before a commit. CI runs exactly these.
+All three must pass before a commit. CI runs these plus a coverage check that
+fails when line coverage drops below 90%:
+
+```sh
+cargo llvm-cov --all-targets --fail-under-lines 90
+```
+
+Coverage sits around 92%. The uncovered remainder is code that needs a real
+terminal or the user's actual login keychain, neither of which belongs in an
+automated test. Do not chase the number by testing `Display` strings.
 
 Two behaviours need a real terminal and are not covered by the suite: the
 hidden-value prompt and the import delete prompt. Verify it by hand with a pty
