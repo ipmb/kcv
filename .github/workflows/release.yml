@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Catches the classic mistake of tagging v0.2.0 while Cargo.toml still
+      # says 0.1.0, before we publish anything.
+      - name: Verify the tag matches Cargo.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          echo "tag=$tag manifest=$manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $manifest"
+            exit 1
+          fi
+
+      - name: Add rustfmt and clippy
+        run: rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Never ship a tag whose tests do not pass.
+      - name: Test
+        run: cargo test --verbose
+
+      - name: Add both macOS targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Make a universal binary
+        run: |
+          mkdir -p dist
+          lipo -create -output dist/kcv \
+            target/aarch64-apple-darwin/release/kcv \
+            target/x86_64-apple-darwin/release/kcv
+          lipo -info dist/kcv
+
+      # Optional: sign with a Developer ID so the binary keeps a stable code
+      # identity across releases, which stops macOS re-prompting for keychain
+      # access after every upgrade. Skipped entirely when the secret is absent.
+      - name: Code sign
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "No signing certificate configured; shipping an unsigned binary."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p actions "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p actions "$keychain"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k actions "$keychain" >/dev/null
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          codesign --force --options runtime --timestamp \
+            -s "$MACOS_SIGN_IDENTITY" dist/kcv
+          codesign --verify --verbose dist/kcv
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Sanity-check the built binary
+        run: |
+          ./dist/kcv --version
+          ./dist/kcv --help > /dev/null
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="kcv-${version}-macos-universal.tar.gz"
+          tar -czf "$archive" -C dist kcv
+          shasum -a 256 "$archive" > "$archive.sha256"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "$ARCHIVE" "$ARCHIVE.sha256"

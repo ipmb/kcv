@@ -109,3 +109,22 @@ cargo clippy --all-targets -- -D warnings
 ```
 
 Design notes are in `docs/superpowers/specs/`.
+
+## CI
+
+`.github/workflows/ci.yml` runs fmt, clippy, and the full suite on every push
+and pull request. `.github/workflows/release.yml` fires on a `v*` tag: it
+re-runs the checks, verifies the tag matches the version in `Cargo.toml`,
+builds a universal binary for Apple Silicon and Intel, and attaches a tarball
+plus its SHA-256 to a GitHub Release.
+
+To cut a release:
+
+```sh
+# bump the version in Cargo.toml first, then:
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Set the `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, and `MACOS_SIGN_IDENTITY`
+repository secrets to have releases code-signed. Without them the release still
+succeeds, unsigned.
