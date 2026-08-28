@@ -42,6 +42,15 @@ impl EnvSet {
         Ok(())
     }
 
+    /// Removes a key, reporting whether it was present.
+    pub fn remove(&mut self, key: &str) -> bool {
+        self.0.remove(key).is_some()
+    }
+
+    pub fn contains(&self, key: &str) -> bool {
+        self.0.contains_key(key)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.0.iter()
     }
@@ -117,6 +126,26 @@ mod tests {
     fn json_of_wrong_shape_is_corrupt() {
         assert!(EnvSet::from_json(b"[1,2,3]", "prod").is_err());
         assert!(EnvSet::from_json(br#"{"K":5}"#, "prod").is_err());
+    }
+
+    #[test]
+    fn removes_a_key_and_reports_whether_it_was_there() {
+        let mut set = EnvSet::new();
+        set.insert("GONE", "x").unwrap();
+        set.insert("KEPT", "y").unwrap();
+        assert!(set.remove("GONE"));
+        assert!(!set.remove("GONE"), "removing twice reports false");
+        assert!(!set.remove("NEVER"));
+        assert_eq!(set.len(), 1);
+        assert_eq!(set.iter().next().unwrap().0, "KEPT");
+    }
+
+    #[test]
+    fn reports_whether_a_key_is_present() {
+        let mut set = EnvSet::new();
+        set.insert("HERE", "x").unwrap();
+        assert!(set.contains("HERE"));
+        assert!(!set.contains("ABSENT"));
     }
 
     #[test]

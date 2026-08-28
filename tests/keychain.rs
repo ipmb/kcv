@@ -74,3 +74,47 @@ fn stores_values_with_newlines_and_unicode() {
         Some(payload.as_bytes().to_vec())
     );
 }
+
+#[test]
+fn lists_environments_from_a_real_keychain() {
+    let kc = TempKeychain::create("envlist");
+    let store = KeychainStore::at(&kc.path).expect("open temp keychain");
+
+    assert_eq!(
+        store.environments().unwrap(),
+        Vec::<String>::new(),
+        "an empty keychain has no environments"
+    );
+
+    store.save("zed", br#"{"A":"1"}"#).unwrap();
+    store.save("alpha", br#"{"B":"2"}"#).unwrap();
+    assert_eq!(
+        store.environments().unwrap(),
+        vec!["alpha".to_string(), "zed".to_string()],
+        "names come back sorted"
+    );
+
+    // Saving again must update in place, not produce a duplicate listing.
+    store.save("zed", br#"{"A":"updated"}"#).unwrap();
+    assert_eq!(
+        store.environments().unwrap(),
+        vec!["alpha".to_string(), "zed".to_string()]
+    );
+}
+
+#[test]
+fn delete_removes_an_item_from_a_real_keychain() {
+    let kc = TempKeychain::create("envdelete");
+    let store = KeychainStore::at(&kc.path).expect("open temp keychain");
+
+    store.save("doomed", br#"{"A":"1"}"#).unwrap();
+    store.save("kept", br#"{"B":"2"}"#).unwrap();
+
+    store.delete("doomed").unwrap();
+    assert_eq!(store.load("doomed").unwrap(), None);
+    assert_eq!(store.load("kept").unwrap(), Some(br#"{"B":"2"}"#.to_vec()));
+    assert_eq!(store.environments().unwrap(), vec!["kept".to_string()]);
+
+    // Deleting what is already gone is not an error.
+    assert!(store.delete("doomed").is_ok());
+}

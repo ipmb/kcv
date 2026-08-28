@@ -29,6 +29,15 @@ enum Commands {
     },
     /// List the environment's variable names, one per line.
     List,
+    /// List every environment, one per line.
+    #[command(visible_alias = "envs")]
+    Environments,
+    /// Remove one or more variables from the environment.
+    Unset {
+        /// Names of the variables to remove.
+        #[arg(required = true, value_name = "KEY")]
+        keys: Vec<String>,
+    },
     /// Import variables from a .env file, then offer to delete it.
     Import {
         /// Path to the .env file to read.
@@ -55,30 +64,48 @@ fn environment_name(flag: Option<String>) -> Result<String> {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let environment = environment_name(cli.environment)?;
     let store = KeychainStore::open()?;
+    // Resolved per arm: `environments` spans every environment and so takes
+    // no environment name.
+    let environment = || environment_name(cli.environment.clone());
 
     match cli.command {
+        Commands::Environments => {
+            for name in cmd::environments(&store)? {
+                println!("{name}");
+            }
+            Ok(())
+        }
         Commands::Set { assignments } => {
+            let environment = environment()?;
             let count = cmd::set(&store, &environment, &assignments)?;
             let plural = if count == 1 { "" } else { "s" };
             eprintln!("Stored {count} variable{plural} in environment {environment:?}");
             Ok(())
         }
         Commands::List => {
+            let environment = environment()?;
             for key in cmd::list(&store, &environment)? {
                 println!("{key}");
             }
             Ok(())
         }
+        Commands::Unset { keys } => {
+            let environment = environment()?;
+            let count = cmd::unset(&store, &environment, &keys)?;
+            let plural = if count == 1 { "" } else { "s" };
+            eprintln!("Removed {count} variable{plural} from environment {environment:?}");
+            Ok(())
+        }
         Commands::Import { path } => {
+            let environment = environment()?;
             let count = cmd::import(&store, &environment, &path)?;
             let plural = if count == 1 { "" } else { "s" };
             eprintln!("Imported {count} variable{plural} into environment {environment:?}");
             offer_to_delete(&path)
         }
         // Returns only on failure.
-        Commands::Exec { argv } => cmd::exec(&store, &environment, &argv).map(|_| ()),
+        Commands::Exec { argv } => cmd::exec(&store, &environment()?, &argv).map(|_| ()),
     }
 }
 

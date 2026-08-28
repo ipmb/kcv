@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `environments` command, with the alias `envs`, printing every environment
+  name sorted, one per line. It searches keychain attributes rather than
+  decrypting item data, so it is the only read that needs no authorization.
+- `unset` command, removing one or more variables from an environment. A name
+  that is not present is an error and nothing is removed. Removing the last
+  variable deletes the environment rather than leaving an empty one.
 - `list` command, printing an environment's variable names sorted, one per line,
   to stdout. Values are not printed. A missing environment is an error rather
   than empty output.
@@ -25,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Documented that a read needing authorization blocks waiting for a GUI dialog
+  rather than failing quickly. The previous wording said it failed, which was
+  wrong and understated the consequence of running without a GUI session.
 - Prompts read from standard input rather than `/dev/tty`. Opening `/dev/tty`
   fails with `ENXIO` for a process that has a terminal on stdin but no
   controlling terminal, which made the hidden-value prompt unusable in some

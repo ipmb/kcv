@@ -80,6 +80,34 @@ Listing reads the keychain item, so it costs one authorization like any other
 read. The names are stored inside the encrypted blob and cannot be retrieved
 without decrypting it.
 
+### unset
+
+```sh
+kcv -e myproject unset API_KEY
+kcv -e myproject unset API_KEY REGION
+```
+
+Removes one or more variables. A name that is not present is an error, and
+nothing is removed, so a typo in one of several names leaves the whole
+environment intact.
+
+Removing the last variable deletes the environment, rather than leaving an
+empty one that nothing could clean up.
+
+### environments
+
+```sh
+kcv environments
+kcv envs
+```
+
+Prints every environment name, sorted, one per line. Takes no `--environment`
+flag. Printing nothing means no environments exist, which is not an error.
+
+This is the only read in `kcv` that needs no authorization: it searches
+keychain attributes and never decrypts item data. It therefore reports which
+environments exist, not which ones you are approved to read.
+
 ### import
 
 ```sh
@@ -169,14 +197,16 @@ Secrets are placed in the child process's environment block, which other
 processes running as the same user can read. This applies to environment
 variable injection generally, including `direnv` and dotenv loaders.
 
-The authorization dialog requires a GUI session. Over SSH with no GUI, a read
-that still needs approval fails instead of prompting. Once approved locally,
-later reads succeed over SSH.
+The authorization dialog requires a GUI session. A read that still needs
+approval will block waiting for a dialog that cannot appear, rather than
+failing quickly, so `set`, `list`, `import` and `exec` can hang in a session
+with no GUI. Approve the binary once locally and later reads succeed without a
+dialog. `environments` is unaffected, since it never decrypts item data.
 
 Values are held in ordinary heap allocations and are not zeroed after use.
 
-There is no command to read back a single value, delete a variable, or list the
-environments that exist. Those are planned but not implemented.
+There is no command to read back a single value. That is planned but not
+implemented.
 
 ## Development
 

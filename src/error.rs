@@ -9,6 +9,10 @@ pub enum Error {
     InvalidEnvironmentName(String),
     InvalidKey(String),
     EnvironmentNotFound(String),
+    KeyNotFound {
+        environment: String,
+        key: String,
+    },
     CorruptItem(String),
     Dotenv {
         path: String,
@@ -63,6 +67,9 @@ impl fmt::Display for Error {
                 f,
                 "no environment {e:?}; create it with: kcv -e {e} set KEY=VALUE"
             ),
+            Error::KeyNotFound { environment, key } => {
+                write!(f, "no variable {key:?} in environment {environment:?}")
+            }
             Error::CorruptItem(e) => write!(
                 f,
                 "the keychain item for environment {e:?} is not valid kcv data; \

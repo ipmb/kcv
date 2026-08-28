@@ -418,3 +418,104 @@ fn list_output_pipes_cleanly() {
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     assert_eq!(stdout.lines().collect::<Vec<_>>(), vec!["A", "B", "C"]);
 }
+
+#[test]
+fn environments_lists_every_environment_sorted() {
+    let kc = TempKeychain::create("envscmd");
+    kc.cmd().args(["-e", "zed", "set", "A=1"]).status().unwrap();
+    kc.cmd()
+        .args(["-e", "alpha", "set", "B=2"])
+        .status()
+        .unwrap();
+    let out = kc.cmd().arg("environments").output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "alpha\nzed\n");
+}
+
+#[test]
+fn envs_is_an_alias_for_environments() {
+    let kc = TempKeychain::create("envsalias");
+    kc.cmd()
+        .args(["-e", "solo", "set", "A=1"])
+        .status()
+        .unwrap();
+    let out = kc.cmd().arg("envs").output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "solo\n");
+}
+
+#[test]
+fn environments_is_empty_and_succeeds_when_nothing_is_stored() {
+    let kc = TempKeychain::create("envsempty");
+    let out = kc.cmd().arg("environments").output().unwrap();
+    assert!(out.status.success(), "an empty list is not an error");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "");
+}
+
+#[test]
+fn unset_removes_a_variable() {
+    let kc = TempKeychain::create("unset");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "GONE=1", "KEPT=2"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "unset", "GONE"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = kc.cmd().args(["-e", "myproject", "list"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "KEPT\n");
+}
+
+#[test]
+fn unset_of_an_unknown_variable_fails_and_changes_nothing() {
+    let kc = TempKeychain::create("unsetbad");
+    kc.cmd()
+        .args(["-e", "myproject", "set", "A=1", "B=2"])
+        .status()
+        .unwrap();
+    let out = kc
+        .cmd()
+        .args(["-e", "myproject", "unset", "A", "TYPOED"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("TYPOED"));
+
+    let out = kc.cmd().args(["-e", "myproject", "list"]).output().unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "A\nB\n",
+        "nothing may be removed when one key is bad"
+    );
+}
+
+#[test]
+fn unsetting_the_last_variable_removes_the_environment() {
+    let kc = TempKeychain::create("unsetlast");
+    kc.cmd()
+        .args(["-e", "doomed", "set", "ONLY=1"])
+        .status()
+        .unwrap();
+    kc.cmd()
+        .args(["-e", "doomed", "unset", "ONLY"])
+        .status()
+        .unwrap();
+
+    let out = kc.cmd().arg("environments").output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "");
+
+    let out = kc
+        .cmd()
+        .args(["-e", "doomed", "exec", "--", "true"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "the environment should be gone");
+}

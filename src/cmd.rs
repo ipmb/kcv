@@ -56,6 +56,45 @@ pub fn set(store: &dyn Store, environment: &str, assignments: &[String]) -> Resu
     Ok(resolved.len())
 }
 
+/// Every environment that exists, sorted. Reads keychain attributes only, so
+/// unlike every other read this needs no authorization.
+pub fn environments(store: &dyn Store) -> Result<Vec<String>> {
+    store.environments()
+}
+
+/// Removes variables from an environment, returning how many were removed.
+/// Every key is checked before anything is written, so a typo in one key
+/// leaves the whole environment untouched. Removing the last variable deletes
+/// the environment rather than leaving an empty one behind.
+pub fn unset(store: &dyn Store, environment: &str, keys: &[String]) -> Result<usize> {
+    validate_environment(environment)?;
+    let mut env_set = load_env_set(store, environment)?
+        .ok_or_else(|| Error::EnvironmentNotFound(environment.to_string()))?;
+
+    for key in keys {
+        if !env_set.contains(key) {
+            return Err(Error::KeyNotFound {
+                environment: environment.to_string(),
+                key: key.clone(),
+            });
+        }
+    }
+
+    let mut removed = 0;
+    for key in keys {
+        if env_set.remove(key) {
+            removed += 1;
+        }
+    }
+
+    if env_set.is_empty() {
+        store.delete(environment)?;
+    } else {
+        store.save(environment, &env_set.to_json())?;
+    }
+    Ok(removed)
+}
+
 /// Returns the environment's variable names, sorted. Values are deliberately
 /// not returned: nothing in kcv writes a secret to stdout.
 pub fn list(store: &dyn Store, environment: &str) -> Result<Vec<String>> {
@@ -428,6 +467,96 @@ mod tests {
             list(&store, "myproject").unwrap(),
             vec!["FIRST".to_string(), "SECOND".to_string()]
         );
+    }
+
+    #[test]
+    fn unset_removes_a_variable() {
+        let store = MemStore::new();
+        set(
+            &store,
+            "myproject",
+            &["GONE=1".to_string(), "KEPT=2".to_string()],
+        )
+        .unwrap();
+        assert_eq!(
+            unset(&store, "myproject", &["GONE".to_string()]).unwrap(),
+            1
+        );
+        assert_eq!(list(&store, "myproject").unwrap(), vec!["KEPT".to_string()]);
+    }
+
+    #[test]
+    fn unset_removes_several_variables_at_once() {
+        let store = MemStore::new();
+        set(
+            &store,
+            "myproject",
+            &["A=1".to_string(), "B=2".to_string(), "C=3".to_string()],
+        )
+        .unwrap();
+        assert_eq!(
+            unset(&store, "myproject", &["A".to_string(), "C".to_string()]).unwrap(),
+            2
+        );
+        assert_eq!(list(&store, "myproject").unwrap(), vec!["B".to_string()]);
+    }
+
+    #[test]
+    fn unset_of_an_unknown_key_errors_and_writes_nothing() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["A=1".to_string(), "B=2".to_string()]).unwrap();
+        let err = unset(
+            &store,
+            "myproject",
+            &["A".to_string(), "TYPOED".to_string()],
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::KeyNotFound { .. }));
+        assert!(err.to_string().contains("TYPOED"), "{err}");
+        assert_eq!(
+            list(&store, "myproject").unwrap(),
+            vec!["A".to_string(), "B".to_string()],
+            "a bad key in the list must leave every variable intact"
+        );
+    }
+
+    #[test]
+    fn unset_of_the_last_variable_deletes_the_environment() {
+        let store = MemStore::new();
+        set(&store, "myproject", &["ONLY=1".to_string()]).unwrap();
+        unset(&store, "myproject", &["ONLY".to_string()]).unwrap();
+        assert_eq!(store.load("myproject").unwrap(), None);
+        assert!(matches!(
+            list(&store, "myproject"),
+            Err(Error::EnvironmentNotFound(_))
+        ));
+        assert_eq!(store.environments().unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn unset_on_a_missing_environment_is_an_error() {
+        let store = MemStore::new();
+        assert!(matches!(
+            unset(&store, "absent", &["K".to_string()]),
+            Err(Error::EnvironmentNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn environments_lists_every_environment_sorted() {
+        let store = MemStore::new();
+        set(&store, "zed", &["A=1".to_string()]).unwrap();
+        set(&store, "alpha", &["B=2".to_string()]).unwrap();
+        assert_eq!(
+            environments(&store).unwrap(),
+            vec!["alpha".to_string(), "zed".to_string()]
+        );
+    }
+
+    #[test]
+    fn environments_is_empty_when_nothing_is_stored() {
+        let store = MemStore::new();
+        assert_eq!(environments(&store).unwrap(), Vec::<String>::new());
     }
 
     #[test]
