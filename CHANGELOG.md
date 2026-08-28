@@ -39,6 +39,8 @@ Nothing has been released yet. On the first release, rename this section to
   `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, and `MACOS_SIGN_IDENTITY` secrets are
   set, and is skipped otherwise.
 
+- MIT license.
+
 ### Security
 
 - Values are never written to stdout, stderr, log output, or error messages.

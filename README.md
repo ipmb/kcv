@@ -183,3 +183,7 @@ git tag v0.1.0 && git push origin v0.1.0
 Releases are signed when the `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, and
 `MACOS_SIGN_IDENTITY` repository secrets are set. Without them the release still
 succeeds and the binary is unsigned.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

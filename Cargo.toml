@@ -2,6 +2,12 @@
 name = "kcv"
 version = "0.1.0"
 edition = "2024"
+description = "Store environment secrets in the macOS keychain and inject them into a process"
+repository = "https://github.com/ipmb/kcv"
+license = "MIT"
+readme = "README.md"
+keywords = ["keychain", "macos", "secrets", "environment"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
