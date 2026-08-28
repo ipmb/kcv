@@ -51,7 +51,7 @@ left unchanged. Values may contain spaces, newlines, and Unicode. Nothing is
 written until every argument has been resolved, so a rejected key leaves the
 stored data untouched.
 
-`set` reports the number of variables written. It does not print values.
+`set` reports the number of variables written.
 
 ### list
 
@@ -60,8 +60,7 @@ kcv -e myproject list
 ```
 
 Prints the environment's variable names, sorted, one per line. Values are not
-printed, so the output is safe to show on a screen share and safe to paste into
-a log:
+printed:
 
 ```
 API_KEY
@@ -73,12 +72,10 @@ Nothing but names goes to stdout, so it pipes:
 
 ```sh
 kcv -e myproject list | grep DATABASE
-kcv -e myproject list | wc -l
 ```
 
-Listing reads the keychain item, so it costs one authorization like any other
-read. The names are stored inside the encrypted blob and cannot be retrieved
-without decrypting it.
+Names live inside the encrypted blob, so listing decrypts the item and costs an
+authorization like any other read.
 
 ### get
 
@@ -262,14 +259,9 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-The suite is 48 tests. Keychain coverage runs against throwaway keychain files
-created and deleted by the tests, so the login keychain is never touched and no
-authorization dialog appears.
-
-Four direct dependencies: `clap`, `serde_json`, `security-framework`, and
-`libc`, for 28 crates in total.
-
-Design notes are in `docs/superpowers/specs/`.
+Keychain coverage runs against throwaway keychain files created and deleted by
+the tests, so the login keychain is never touched and no authorization dialog
+appears.
 
 ## CI
 
@@ -280,15 +272,6 @@ pull request.
 verifies the tag matches the version in `Cargo.toml`, builds a universal binary
 for Apple Silicon and Intel, and attaches a tarball and its SHA-256 to a GitHub
 release.
-
-```sh
-# update the version in Cargo.toml first
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-Releases are signed when the `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, and
-`MACOS_SIGN_IDENTITY` repository secrets are set. Without them the release still
-succeeds and the binary is unsigned.
 
 ## License
 
